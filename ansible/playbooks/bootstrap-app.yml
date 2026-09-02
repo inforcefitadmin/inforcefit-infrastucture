@@ -1,0 +1,155 @@
+---
+- name: Cold-start InforceFit application (prod + dev)
+  hosts: webservers
+  become: true
+
+  vars_files:
+    - ../vars/main.yml
+
+  vars:
+    repo_url: "git@github.com:inforcefitadmin/inforcefit-server.git"
+
+  tasks:
+    # ---------------------------------------------------------
+    # Infisical CLI (needed to pull .env, same source as CI)
+    # ---------------------------------------------------------
+    - name: Add Infisical GPG key
+      get_url:
+        url: https://artifacts-cli.infisical.com/infisical.asc
+        dest: /etc/apt/keyrings/infisical.asc
+        mode: '0644'
+
+    - name: Add Infisical repository
+      apt_repository:
+        repo: "deb [signed-by=/etc/apt/keyrings/infisical.asc] https://artifacts-cli.infisical.com/apt stable main"
+        state: present
+
+    - name: Install Infisical CLI
+      apt:
+        name: infisical
+        state: present
+        update_cache: yes
+
+    # ---------------------------------------------------------
+    # Directories + clone (idempotent — creates=... skips if exists)
+    # ---------------------------------------------------------
+    - name: Ensure /var/www exists
+      file:
+        path: /var/www
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_group }}"
+        mode: '0755'
+
+    - name: Clone production repo (skips if already cloned)
+      become_user: "{{ app_user }}"
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ prod_app_dir }}"
+        version: main
+        accept_hostkey: yes
+        update: no
+
+    - name: Clone development repo (skips if already cloned)
+      become_user: "{{ app_user }}"
+      git:
+        repo: "{{ repo_url }}"
+        dest: "{{ dev_app_dir }}"
+        version: dev
+        accept_hostkey: yes
+        update: no
+
+    # ---------------------------------------------------------
+    # .env via Infisical (one pass per environment)
+    # ---------------------------------------------------------
+    - name: Log in to Infisical (prod)
+      become_user: "{{ app_user }}"
+      command: >
+        infisical login
+        --method=universal-auth
+        --client-id={{ infisical_client_id }}
+        --client-secret={{ infisical_client_secret }}
+        --domain={{ infisical_domain }}
+        --silent --plain
+      register: infisical_token_prod
+      no_log: true
+
+    - name: Export .env for prod
+      become_user: "{{ app_user }}"
+      shell: >
+        infisical export
+        --token={{ infisical_token_prod.stdout }}
+        --projectId={{ infisical_project_id }}
+        --env=prod
+        --domain={{ infisical_domain }}
+        --format=dotenv > {{ prod_app_dir }}/.env
+      no_log: true
+
+    - name: Export .env for dev
+      become_user: "{{ app_user }}"
+      shell: >
+        infisical export
+        --token={{ infisical_token_prod.stdout }}
+        --projectId={{ infisical_project_id }}
+        --env=dev
+        --domain={{ infisical_domain }}
+        --format=dotenv > {{ dev_app_dir }}/.env
+      no_log: true
+
+    # ---------------------------------------------------------
+    # Install deps + build (both environments)
+    # ---------------------------------------------------------
+    - name: Install dependencies (prod)
+      become_user: "{{ app_user }}"
+      command: pnpm install --frozen-lockfile
+      args:
+        chdir: "{{ prod_app_dir }}"
+
+    - name: Build (prod)
+      become_user: "{{ app_user }}"
+      command: pnpm run build
+      args:
+        chdir: "{{ prod_app_dir }}"
+
+    - name: Install dependencies (dev)
+      become_user: "{{ app_user }}"
+      command: pnpm install --frozen-lockfile
+      args:
+        chdir: "{{ dev_app_dir }}"
+
+    - name: Build (dev)
+      become_user: "{{ app_user }}"
+      command: pnpm run build
+      args:
+        chdir: "{{ dev_app_dir }}"
+
+    # ---------------------------------------------------------
+    # First PM2 start (safe if already running — describe check)
+    # ---------------------------------------------------------
+    - name: Check if prod PM2 process already exists
+      become_user: "{{ app_user }}"
+      command: pm2 describe {{ prod_pm2_name }}
+      register: pm2_prod_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Start prod PM2 process (first time only)
+      become_user: "{{ app_user }}"
+      command: pm2 start {{ prod_app_dir }}/dist/index.js --name {{ prod_pm2_name }}
+      when: pm2_prod_check.rc != 0
+
+    - name: Check if dev PM2 process already exists
+      become_user: "{{ app_user }}"
+      command: pm2 describe {{ dev_pm2_name }}
+      register: pm2_dev_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Start dev PM2 process (first time only)
+      become_user: "{{ app_user }}"
+      command: pm2 start {{ dev_app_dir }}/dist/index.js --name {{ dev_pm2_name }}
+      when: pm2_dev_check.rc != 0
+
+    - name: Save PM2 process list
+      become_user: "{{ app_user }}"
+      command: pm2 save
