@@ -1,6 +1,44 @@
 # InforceFit Infrastructure
 
 Ansible configuration for the initial provisioning of the VPS that runs the InforceFit application. Application code deployment (prod/dev) is handled separately via GitHub Actions (`release.yml` in the `inforcefit-server` repository) — this repository is responsible **only for server provisioning**, not for shipping releases.
+## Cold-starting the application (first run on a new server)
+
+After `setup-vps.yml` has provisioned the server, run `bootstrap-app.yml` **once** to bring both prod and dev online from scratch: clones both repositories, pulls `.env` from Infisical, installs dependencies, builds, and starts both apps under PM2.
+
+### Additional variables required
+
+Add to `ansible/vars/main.yml`:
+```yaml
+infisical_domain: "https://app.infisical.com"
+infisical_project_id: "YOUR_PROJECT_ID"
+```
+
+`infisical_client_id` and `infisical_client_secret` must **not** be committed in plain text. Either pass them at runtime:
+```bash
+ansible-playbook -i inventory/prod playbooks/bootstrap-app.yml \
+  --extra-vars "infisical_client_id=xxx infisical_client_secret=yyy"
+```
+
+or store them in an Ansible Vault file:
+```bash
+ansible-vault create ansible/vars/secrets.yml
+```
+```yaml
+infisical_client_id: "xxx"
+infisical_client_secret: "yyy"
+```
+and reference it in `bootstrap-app.yml`'s `vars_files`.
+
+### Running
+
+```bash
+cd ansible
+ansible-playbook -i inventory/prod playbooks/bootstrap-app.yml --ask-vault-pass
+```
+
+This step is **idempotent for the PM2 start**: if a process with the same name is already running, it will be skipped rather than duplicated. It is **not** idempotent for cloning — re-running against an already-cloned directory will simply skip the clone step (`update: no`), so subsequent code updates must go through the normal GitHub Actions deploy pipeline, not this playbook.
+
+Run it once per fresh server (or per environment, if prod/dev live on separate hosts). Ongoing deployments after this point are handled exclusively by `release.yml` in GitHub Actions — this playbook is only for the initial cold start.
 
 ## What this playbook does
 
@@ -104,3 +142,4 @@ After that, the first code deployment via GitHub Actions (push to `dev`, or a ma
 - Loki retention configuration (deleting old logs) is not automated in this role yet — it's set up manually on the server after installation.
 - The `monitoring` role is designed for a **new** server; for a server that already has a monitoring stack set up manually, a manual review is needed before applying it.
 - SSL certificates via Certbot require a manual `certbot --nginx -d your-domain` run after nginx is installed (not automated in this role).
+- `bootstrap-app.yml` is meant for first-time cold start only; it does not handle subsequent code updates, migrations, or rollbacks — those remain the responsibility of `release.yml` (GitHub Actions).
