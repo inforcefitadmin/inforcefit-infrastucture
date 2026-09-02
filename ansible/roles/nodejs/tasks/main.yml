@@ -1,0 +1,32 @@
+---
+- name: Download NodeSource setup script
+  get_url:
+    url: "https://deb.nodesource.com/setup_{{ nodejs_version }}"
+    dest: /tmp/nodesource_setup.sh
+    mode: '0755'
+
+- name: Execute NodeSource setup script
+  command: /tmp/nodesource_setup.sh
+  args:
+    creates: /etc/apt/sources.list.d/nodesource.list
+
+- name: Install Node.js
+  apt:
+    name: nodejs
+    state: present
+    update_cache: yes
+
+- name: Install PM2 and pnpm globally
+  npm:
+    name: "{{ item }}"
+    global: yes
+    state: present
+  loop:
+    - pm2
+    - pnpm
+
+- name: Ensure PM2 starts on boot
+  command: pm2 startup systemd -u {{ app_user }} --hp /home/{{ app_user }}
+  register: pm2_startup
+  changed_when: "'Command successfully executed' in pm2_startup.stdout"
+  ignore_errors: true

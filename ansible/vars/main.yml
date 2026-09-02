@@ -1,0 +1,34 @@
+---
+# ==========================================
+# System Settings
+# ==========================================
+ansible_python_interpreter: /usr/bin/python3
+
+# The actual user managing PM2 based on your logs
+app_user: deploy
+app_group: deploy
+
+# ==========================================
+# Node.js Settings
+# ==========================================
+nodejs_version: "20.x"
+
+# ==========================================
+# Environment: Production
+# ==========================================
+prod_pm2_name: "inforce-fit-prod"
+prod_app_dir: "/var/www/inforcefit-server"
+prod_app_port: 3000
+
+# ==========================================
+# Environment: Development
+# ==========================================
+dev_pm2_name: "inforce-fit-dev"
+dev_app_dir: "/var/www/inforcefit-server-dev"
+dev_app_port: 3001
+
+# ==========================================
+# Nginx Domains
+# ==========================================
+prod_domain: "api.yourdomain.com"
+dev_domain: "dev-api.yourdomain.com"

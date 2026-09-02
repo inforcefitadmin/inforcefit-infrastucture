@@ -1,0 +1,32 @@
+---
+- name: Deploy InforceFit Application
+  hosts: webservers
+  become: true
+  become_user: "{{ app_user }}" 
+
+  vars_files:
+    - ../vars/main.yml
+
+  tasks:
+    - name: Pull latest code from GitHub (Prod)
+      git:
+        repo: "git@github.com:your-organization/inforcefit-server.git"
+        dest: "{{ prod_app_dir }}"
+        version: main
+        accept_hostkey: yes
+        update: yes
+      register: git_pull_prod
+
+    - name: Install dependencies with pnpm (Prod)
+      command: pnpm install
+      args:
+        chdir: "{{ prod_app_dir }}"
+      when: git_pull_prod.changed
+
+    - name: Restart PM2 process (Prod)
+      command: pm2 restart {{ prod_pm2_name }} --update-env
+      when: git_pull_prod.changed
+
+    - name: Save PM2 state
+      command: pm2 save
+      when: git_pull_prod.changed

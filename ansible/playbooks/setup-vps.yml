@@ -1,0 +1,12 @@
+---
+- name: Setup InforceFit VPS Infrastructure
+  hosts: webservers
+  become: true 
+
+  vars_files:
+    - ../vars/main.yml
+
+  roles:
+    - role: ../roles/base
+    - role: ../roles/nodejs
+    - role: ../roles/nginx

@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # Grafana - Monitoring Dashboard
+  # ==========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3005:3000" # Available on the server via port 3005
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin # Change this password after the first login!
+
+volumes:
+  grafana_data:

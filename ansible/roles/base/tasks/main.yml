@@ -1,0 +1,40 @@
+---
+- name: Install required basic packages
+  apt:
+    name:
+      - curl
+      - git
+      - ufw
+      - build-essential
+      - apt-transport-https
+      - ca-certificates
+    state: present
+    update_cache: yes
+
+- name: Ensure the app group exists
+  group:
+    name: "{{ app_group }}"
+    state: present
+
+- name: Ensure the app user exists
+  user:
+    name: "{{ app_user }}"
+    group: "{{ app_group }}"
+    shell: /bin/bash
+    create_home: yes
+    state: present
+
+- name: Setup UFW firewall rules
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "{{ ansible_port | default('22') }}" # Allows your custom SSH port (2222)
+    - "80"   # HTTP for Nginx
+    - "443"  # HTTPS for Nginx
+
+- name: Enable UFW
+  ufw:
+    state: enabled
+    policy: deny
