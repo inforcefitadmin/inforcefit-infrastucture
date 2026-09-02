@@ -1,0 +1,36 @@
+---
+- name: Install auditd
+  apt:
+    name: auditd
+    state: present
+    update_cache: yes
+
+- name: Deploy critical-dirs audit rules
+  copy:
+    dest: /etc/audit/rules.d/critical-dirs.rules
+    content: |
+      -w /home/{{ app_user }}/.ssh -p wa -k ssh_keys
+      -w /root/.ssh -p wa -k ssh_keys
+      -w /etc/passwd -p wa -k identity
+      -w /etc/shadow -p wa -k identity
+      -w /etc/sudoers -p wa -k identity
+      -w /etc/sudoers.d -p wa -k identity
+      -w /etc/ssh/sshd_config -p wa -k sshd_config
+      -w /etc/cron.d -p wa -k cron_changes
+      -w /etc/crontab -p wa -k cron_changes
+      -w /var/spool/cron -p wa -k cron_changes
+      -w /etc/systemd/system -p wa -k systemd_units
+      -w /etc/nginx -p wa -k nginx_config
+      -w {{ prod_app_dir }}/.env -p wa -k app_secrets
+      -w {{ dev_app_dir }}/.env -p wa -k app_secrets
+      -w {{ prod_app_dir }}/dist -p wa -k app_code_prod
+      -w {{ dev_app_dir }}/dist -p wa -k app_code_dev
+      -w /root/.ssh/authorized_keys -p wa -k ssh_keys_change
+      -w /home/{{ app_user }}/.ssh/authorized_keys -p wa -k ssh_keys_change
+  notify: Reload auditd rules
+
+- name: Ensure auditd is enabled and running
+  service:
+    name: auditd
+    state: started
+    enabled: yes

@@ -25,8 +25,37 @@
     - pm2
     - pnpm
 
-- name: Ensure PM2 starts on boot
+- name: Install pm2-logrotate module
+  become: true
+  become_user: "{{ app_user }}"
+  command: pm2 install pm2-logrotate
+
+- name: Configure pm2-logrotate max size
+  become: true
+  become_user: "{{ app_user }}"
+  command: pm2 set pm2-logrotate:max_size 50M
+
+- name: Configure pm2-logrotate retention
+  become: true
+  become_user: "{{ app_user }}"
+  command: pm2 set pm2-logrotate:retain 7
+
+- name: Generate PM2 systemd startup script
   command: pm2 startup systemd -u {{ app_user }} --hp /home/{{ app_user }}
   register: pm2_startup
   changed_when: "'Command successfully executed' in pm2_startup.stdout"
   ignore_errors: true
+
+- name: Extend systemd unit TimeoutStartSec (fixes resurrect race condition)
+  lineinfile:
+    path: /etc/systemd/system/pm2-{{ app_user }}.service
+    insertafter: '^\[Service\]'
+    line: 'TimeoutStartSec=30'
+    state: present
+  notify: Reload systemd daemon
+
+- name: Ensure PM2 systemd service is enabled
+  systemd:
+    name: "pm2-{{ app_user }}"
+    enabled: yes
+    daemon_reload: yes

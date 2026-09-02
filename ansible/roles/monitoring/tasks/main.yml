@@ -1,56 +1,58 @@
 ---
-- name: Create directory for Docker keyrings
-  file:
-    path: /etc/apt/keyrings
-    state: directory
-    mode: '0755'
-
-- name: Add Docker's official GPG key
-  get_url:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    dest: /etc/apt/keyrings/docker.asc
-    mode: '0644'
-
-- name: Add Docker repository
-  apt_repository:
-    repo: "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
-    state: present
-
-- name: Install Docker and Docker Compose
+- name: Install Prometheus and Grafana dependencies
   apt:
     name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
+      - prometheus
+      - prometheus-node-exporter
+      - adduser
+      - libfontconfig1
     state: present
     update_cache: yes
 
-- name: Add app_user to docker group
-  user:
-    name: "{{ app_user }}"
-    groups: docker
-    append: yes
+- name: Add Grafana GPG key
+  get_url:
+    url: https://apt.grafana.com/gpg.key
+    dest: /etc/apt/keyrings/grafana.asc
+    mode: '0644'
 
-- name: Create monitoring configuration directory
-  file:
-    path: /opt/monitoring
-    state: directory
-    owner: "{{ app_user }}"
-    group: "{{ app_group }}"
+- name: Add Grafana repository
+  apt_repository:
+    repo: "deb [signed-by=/etc/apt/keyrings/grafana.asc] https://apt.grafana.com stable main"
+    state: present
+
+- name: Install Grafana
+  apt:
+    name: grafana
+    state: present
+    update_cache: yes
+
+- name: Configure Grafana to listen on custom port
+  lineinfile:
+    path: /etc/grafana/grafana.ini
+    regexp: '^;?http_port ='
+    line: "http_port = {{ grafana_port }}"
+    insertafter: '^\[server\]'
+
+- name: Ensure Grafana is enabled and running
+  service:
+    name: grafana-server
+    state: started
+    enabled: yes
+
+- name: Ensure Prometheus is enabled and running
+  service:
+    name: prometheus
+    state: started
+    enabled: yes
+
+- name: Download Loki binary
+  get_url:
+    url: "https://github.com/grafana/loki/releases/latest/download/loki-linux-amd64.zip"
+    dest: /tmp/loki.zip
+
+- name: Unzip Loki binary
+  unarchive:
+    src: /tmp/loki.zip
+    dest: /usr/local/bin
+    remote_src: yes
     mode: '0755'
-
-- name: Copy docker-compose template for Grafana and Infisical
-  template:
-    src: docker-compose.yml.j2
-    dest: /opt/monitoring/docker-compose.yml
-    owner: "{{ app_user }}"
-    group: "{{ app_group }}"
-
-- name: Start Docker Compose services
-  command: docker compose up -d
-  args:
-    chdir: /opt/monitoring
-  become: true
-  become_user: "{{ app_user }}"

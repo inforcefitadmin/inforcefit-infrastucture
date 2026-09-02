@@ -8,6 +8,9 @@
       - build-essential
       - apt-transport-https
       - ca-certificates
+      - fail2ban
+      - unattended-upgrades
+      - jq
     state: present
     update_cache: yes
 
@@ -30,11 +33,25 @@
     port: "{{ item }}"
     proto: tcp
   loop:
-    - "{{ ansible_port | default('22') }}" # Allows your custom SSH port (2222)
-    - "80"   # HTTP for Nginx
-    - "443"  # HTTPS for Nginx
+    - "{{ ssh_port }}"
+    - "80"
+    - "443"
 
 - name: Enable UFW
   ufw:
     state: enabled
     policy: deny
+
+- name: Enable fail2ban
+  service:
+    name: fail2ban
+    state: started
+    enabled: yes
+
+- name: Enable unattended-upgrades
+  copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: '0644'
