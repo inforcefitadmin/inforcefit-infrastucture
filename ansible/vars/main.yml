@@ -39,3 +39,9 @@ loki_port: 3100
 # Security / auditd
 # ==========================================
 ssh_port: 24816   
+
+# ==========================================
+# Infisical
+# ==========================================
+infisical_domain: "https://app.infisical.com"
+infisical_project_id: "d31e7d0e-37e1-4cab-9c54-c4496a33399a"
